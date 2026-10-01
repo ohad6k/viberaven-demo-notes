@@ -1,0 +1,53 @@
+# VibeRaven checks every pull request in this repository's own GitHub Actions run.
+# The code is read on the runner and never uploaded. Written by `npx -y viberaven init --github`.
+name: VibeRaven
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check:
+    name: Launch check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check this change
+        id: check
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          code=0
+          npx -y viberaven@1.6.1 check --base "origin/$BASE_REF" --markdown > viberaven-check.md || code=$?
+          cat viberaven-check.md >> "$GITHUB_STEP_SUMMARY"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
+      # Pull requests from forks get a read-only token: they keep the job summary and skip the comment.
+      - name: Comment on the pull request
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq '.[] | select(.body | contains("<!-- viberaven-check -->")) | .id' | tail -n 1)
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@viberaven-check.md > /dev/null
+          else
+            gh pr comment "$PR" --body-file viberaven-check.md
+          fi
+
+      # Advice, not a gate. To block merging when a change adds a launch blocker, uncomment this step
+      # and mark "Launch check" as required in the branch protection settings.
+      # - name: Fail on new blockers
+      #   if: steps.check.outputs.code == '1'
+      #   run: exit 1
