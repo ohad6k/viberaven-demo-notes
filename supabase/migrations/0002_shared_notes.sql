@@ -5,3 +5,11 @@ create table public.shared_notes (
   shared_with uuid not null,
   created_at timestamptz not null default now()
 );
+
+alter table public.shared_notes enable row level security;
+
+create policy "owner and recipient read shared notes" on public.shared_notes
+  for select using (
+    shared_with = auth.uid()
+    or exists (select 1 from public.notes n where n.id = note_id and n.user_id = auth.uid())
+  );
