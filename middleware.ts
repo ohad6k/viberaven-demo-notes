@@ -9,7 +9,7 @@ export async function middleware(request: NextRequest) {
     {
       cookies: {
         getAll: () => request.cookies.getAll(),
-        setAll: (items) => items.forEach(({ name, value }) => response.cookies.set(name, value))
+        setAll: (items: { name: string; value: string }[]) => items.forEach(({ name, value }) => response.cookies.set(name, value))
       }
     }
   );
